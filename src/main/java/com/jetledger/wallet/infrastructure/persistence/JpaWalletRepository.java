@@ -2,11 +2,13 @@ package com.jetledger.wallet.infrastructure.persistence;
 
 import com.jetledger.wallet.domain.model.*;
 import com.jetledger.wallet.domain.repository.WalletRepository;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Repository;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.*;
 
+@Slf4j
 @Repository
 public class JpaWalletRepository implements WalletRepository {
 

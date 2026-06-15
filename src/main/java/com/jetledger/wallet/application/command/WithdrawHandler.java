@@ -3,7 +3,9 @@ package com.jetledger.wallet.application.command;
 import com.jetledger.wallet.domain.event.WithdrawRejected;
 import com.jetledger.wallet.domain.model.Wallet;
 import com.jetledger.wallet.domain.repository.WalletRepository;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 public class WithdrawHandler {
 
     private final WalletRepository repository;

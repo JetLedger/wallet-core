@@ -1,15 +1,16 @@
 package com.jetledger.wallet.infrastructure.event;
 
+import com.jetledger.wallet.domain.event.MoneyDeposited;
+import com.jetledger.wallet.domain.event.MoneyWithdrawn;
 import com.jetledger.wallet.domain.event.WalletDomainEvent;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import com.jetledger.wallet.domain.event.WithdrawRejected;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
+@Slf4j
 @Component
 public class SpringDomainEventPublisher {
-
-    private static final Logger log = LoggerFactory.getLogger(SpringDomainEventPublisher.class);
 
     private final ApplicationEventPublisher springPublisher;
 
@@ -25,9 +26,9 @@ public class SpringDomainEventPublisher {
 
     private String extractCorrelationId(WalletDomainEvent event) {
         return switch (event) {
-            case com.jetledger.wallet.domain.event.MoneyDeposited e -> e.correlationId().toString();
-            case com.jetledger.wallet.domain.event.MoneyWithdrawn e -> e.correlationId().toString();
-            case com.jetledger.wallet.domain.event.WithdrawRejected e -> e.correlationId().toString();
+            case MoneyDeposited e -> e.correlationId().toString();
+            case MoneyWithdrawn e -> e.correlationId().toString();
+            case WithdrawRejected e -> e.correlationId().toString();
             default -> "N/A";
         };
     }
