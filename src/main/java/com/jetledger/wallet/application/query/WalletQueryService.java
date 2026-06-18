@@ -2,7 +2,9 @@ package com.jetledger.wallet.application.query;
 
 import com.jetledger.wallet.domain.model.WalletId;
 import java.util.Optional;
+import org.springframework.stereotype.Service;
 
+@Service
 public class WalletQueryService {
 
     private final WalletProjection projection;

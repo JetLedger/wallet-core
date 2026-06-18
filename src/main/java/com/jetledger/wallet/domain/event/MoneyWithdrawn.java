@@ -10,5 +10,6 @@ public record MoneyWithdrawn(WalletId walletId, Money amount, Money balanceAfter
 
     public MoneyWithdrawn {
         if (timestamp == null) timestamp = Instant.now();
+        if (correlationId == null) correlationId = UUID.randomUUID();
     }
 }

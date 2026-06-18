@@ -23,7 +23,6 @@ public class JpaWalletRepository implements WalletRepository {
         WalletEntity entity = springDataRepository.findById(wallet.id().value())
             .map(existing -> {
                 existing.setBalance(wallet.balance().amount());
-                existing.setVersion(wallet.version());
                 existing.setUpdatedAt(Instant.now());
                 return existing;
             })

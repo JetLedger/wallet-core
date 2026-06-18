@@ -35,7 +35,7 @@ public class Wallet {
         return wallet;
     }
 
-    public void deposit(Money amount) {
+    public void deposit(Money amount, UUID correlationId) {
         if (amount.amount().compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("deposit amount must be positive");
         }
@@ -44,10 +44,10 @@ public class Wallet {
         }
         this.balance = this.balance.add(amount);
         this.version++;
-        this.domainEvents.add(new MoneyDeposited(id, amount, balance, UUID.randomUUID(), Instant.now()));
+        this.domainEvents.add(new MoneyDeposited(id, amount, balance, correlationId, Instant.now()));
     }
 
-    public void withdraw(Money amount) {
+    public void withdraw(Money amount, UUID correlationId) {
         if (amount.amount().compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("withdraw amount must be positive");
         }
@@ -55,12 +55,12 @@ public class Wallet {
             throw new IllegalArgumentException("currency mismatch");
         }
         if (amount.amount().compareTo(this.balance.amount()) > 0) {
-            this.domainEvents.add(new WithdrawRejected(id, amount, balance, "Insufficient funds", UUID.randomUUID(), Instant.now()));
+            this.domainEvents.add(new WithdrawRejected(id, amount, balance, "Insufficient funds", correlationId, Instant.now()));
             return;
         }
         this.balance = this.balance.subtract(amount);
         this.version++;
-        this.domainEvents.add(new MoneyWithdrawn(id, amount, balance, UUID.randomUUID(), Instant.now()));
+        this.domainEvents.add(new MoneyWithdrawn(id, amount, balance, correlationId, Instant.now()));
     }
 
     public WalletId id() { return id; }

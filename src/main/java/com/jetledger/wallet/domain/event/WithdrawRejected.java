@@ -10,5 +10,6 @@ public record WithdrawRejected(WalletId walletId, Money amount, Money balance, S
 
     public WithdrawRejected {
         if (timestamp == null) timestamp = Instant.now();
+        if (correlationId == null) correlationId = UUID.randomUUID();
     }
 }

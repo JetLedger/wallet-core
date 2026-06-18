@@ -4,8 +4,10 @@ import com.jetledger.wallet.domain.model.Wallet;
 import com.jetledger.wallet.domain.model.WalletId;
 import com.jetledger.wallet.domain.repository.WalletRepository;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
 
 @Slf4j
+@Service
 public class CreateWalletHandler {
 
     private final WalletRepository repository;

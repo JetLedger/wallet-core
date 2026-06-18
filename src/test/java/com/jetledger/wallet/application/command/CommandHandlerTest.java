@@ -21,7 +21,7 @@ class CommandHandlerTest {
     @Test
     void shouldHandleCreateWalletCommand() {
         OwnerId ownerId = OwnerId.generate();
-        CreateWalletCommand command = new CreateWalletCommand(ownerId, Currency.getInstance("USD"));
+        CreateWalletCommand command = new CreateWalletCommand(ownerId, Currency.getInstance("USD"), UUID.randomUUID());
         CreateWalletHandler handler = new CreateWalletHandler(repository);
         WalletId walletId = handler.handle(command);
         assertNotNull(walletId);
@@ -34,7 +34,7 @@ class CommandHandlerTest {
     @Test
     void shouldHandleDepositCommand() {
         Wallet wallet = Wallet.create(WalletId.generate(), OwnerId.generate(), Currency.getInstance("USD"));
-        wallet.deposit(Money.of(new BigDecimal("100.00"), Currency.getInstance("USD")));
+        wallet.deposit(Money.of(new BigDecimal("100.00"), Currency.getInstance("USD")), UUID.randomUUID());
         repository.save(wallet);
         wallet.clearDomainEvents();
         DepositCommand command = new DepositCommand(wallet.id(),
@@ -50,7 +50,7 @@ class CommandHandlerTest {
     @Test
     void shouldHandleWithdrawCommandSuccessfully() {
         Wallet wallet = Wallet.create(WalletId.generate(), OwnerId.generate(), Currency.getInstance("USD"));
-        wallet.deposit(Money.of(new BigDecimal("200.00"), Currency.getInstance("USD")));
+        wallet.deposit(Money.of(new BigDecimal("200.00"), Currency.getInstance("USD")), UUID.randomUUID());
         repository.save(wallet);
         wallet.clearDomainEvents();
         WithdrawCommand command = new WithdrawCommand(wallet.id(),
@@ -66,7 +66,7 @@ class CommandHandlerTest {
     @Test
     void shouldRejectWithdrawWhenInsufficientFunds() {
         Wallet wallet = Wallet.create(WalletId.generate(), OwnerId.generate(), Currency.getInstance("USD"));
-        wallet.deposit(Money.of(new BigDecimal("30.00"), Currency.getInstance("USD")));
+        wallet.deposit(Money.of(new BigDecimal("30.00"), Currency.getInstance("USD")), UUID.randomUUID());
         repository.save(wallet);
         wallet.clearDomainEvents();
         WithdrawCommand command = new WithdrawCommand(wallet.id(),
@@ -106,7 +106,11 @@ class CommandHandlerTest {
 
         @Override
         public Optional<Wallet> findById(WalletId walletId) {
-            return Optional.ofNullable(store.get(walletId));
+            Wallet stored = store.get(walletId);
+            if (stored == null) return Optional.empty();
+            return Optional.of(Wallet.reconstitute(
+                stored.id(), stored.ownerId(), stored.currency(),
+                stored.balance(), stored.version()));
         }
     }
 }

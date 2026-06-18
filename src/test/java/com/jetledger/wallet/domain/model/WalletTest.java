@@ -49,7 +49,7 @@ class WalletTest {
     void shouldDepositMoney() {
         Wallet wallet = Wallet.create(walletId, ownerId, usd);
         Money amount = Money.of(new BigDecimal("100.00"), usd);
-        wallet.deposit(amount);
+        wallet.deposit(amount, UUID.randomUUID());
         assertEquals(new BigDecimal("100.00"), wallet.balance().amount());
     }
 
@@ -58,7 +58,7 @@ class WalletTest {
         Wallet wallet = Wallet.create(walletId, ownerId, usd);
         wallet.clearDomainEvents();
         Money amount = Money.of(new BigDecimal("100.00"), usd);
-        wallet.deposit(amount);
+        wallet.deposit(amount, UUID.randomUUID());
         List<WalletDomainEvent> events = wallet.domainEvents();
         assertEquals(1, events.size());
         assertInstanceOf(MoneyDeposited.class, events.get(0));
@@ -71,14 +71,14 @@ class WalletTest {
     void shouldRejectDepositWithDifferentCurrency() {
         Wallet wallet = Wallet.create(walletId, ownerId, usd);
         Money amount = Money.of(new BigDecimal("100.00"), Currency.getInstance("EUR"));
-        assertThrows(IllegalArgumentException.class, () -> wallet.deposit(amount));
+        assertThrows(IllegalArgumentException.class, () -> wallet.deposit(amount, UUID.randomUUID()));
     }
 
     @Test
     void shouldRejectDepositOfZero() {
         Wallet wallet = Wallet.create(walletId, ownerId, usd);
         Money zero = Money.of(BigDecimal.ZERO, usd);
-        assertThrows(IllegalArgumentException.class, () -> wallet.deposit(zero));
+        assertThrows(IllegalArgumentException.class, () -> wallet.deposit(zero, UUID.randomUUID()));
     }
 
     @Test
@@ -90,20 +90,20 @@ class WalletTest {
     @Test
     void shouldWithdrawMoney() {
         Wallet wallet = Wallet.create(walletId, ownerId, usd);
-        wallet.deposit(Money.of(new BigDecimal("200.00"), usd));
+        wallet.deposit(Money.of(new BigDecimal("200.00"), usd), UUID.randomUUID());
         wallet.clearDomainEvents();
         Money amount = Money.of(new BigDecimal("50.00"), usd);
-        wallet.withdraw(amount);
+        wallet.withdraw(amount, UUID.randomUUID());
         assertEquals(new BigDecimal("150.00"), wallet.balance().amount());
     }
 
     @Test
     void shouldEmitMoneyWithdrawnEventOnSuccessfulWithdraw() {
         Wallet wallet = Wallet.create(walletId, ownerId, usd);
-        wallet.deposit(Money.of(new BigDecimal("200.00"), usd));
+        wallet.deposit(Money.of(new BigDecimal("200.00"), usd), UUID.randomUUID());
         wallet.clearDomainEvents();
         Money amount = Money.of(new BigDecimal("50.00"), usd);
-        wallet.withdraw(amount);
+        wallet.withdraw(amount, UUID.randomUUID());
         List<WalletDomainEvent> events = wallet.domainEvents();
         assertEquals(1, events.size());
         assertInstanceOf(MoneyWithdrawn.class, events.get(0));
@@ -115,20 +115,20 @@ class WalletTest {
     @Test
     void shouldRejectWithdrawWithInsufficientFunds() {
         Wallet wallet = Wallet.create(walletId, ownerId, usd);
-        wallet.deposit(Money.of(new BigDecimal("30.00"), usd));
+        wallet.deposit(Money.of(new BigDecimal("30.00"), usd), UUID.randomUUID());
         wallet.clearDomainEvents();
         Money amount = Money.of(new BigDecimal("100.00"), usd);
-        wallet.withdraw(amount);
+        wallet.withdraw(amount, UUID.randomUUID());
         assertEquals(new BigDecimal("30.00"), wallet.balance().amount());
     }
 
     @Test
     void shouldEmitWithdrawRejectedEventOnInsufficientFunds() {
         Wallet wallet = Wallet.create(walletId, ownerId, usd);
-        wallet.deposit(Money.of(new BigDecimal("30.00"), usd));
+        wallet.deposit(Money.of(new BigDecimal("30.00"), usd), UUID.randomUUID());
         wallet.clearDomainEvents();
         Money amount = Money.of(new BigDecimal("100.00"), usd);
-        wallet.withdraw(amount);
+        wallet.withdraw(amount, UUID.randomUUID());
         List<WalletDomainEvent> events = wallet.domainEvents();
         assertEquals(1, events.size());
         assertInstanceOf(WithdrawRejected.class, events.get(0));
@@ -141,24 +141,24 @@ class WalletTest {
     @Test
     void shouldRejectWithdrawWithDifferentCurrency() {
         Wallet wallet = Wallet.create(walletId, ownerId, usd);
-        wallet.deposit(Money.of(new BigDecimal("100.00"), usd));
+        wallet.deposit(Money.of(new BigDecimal("100.00"), usd), UUID.randomUUID());
         wallet.clearDomainEvents();
         Money amount = Money.of(new BigDecimal("50.00"), Currency.getInstance("EUR"));
-        assertThrows(IllegalArgumentException.class, () -> wallet.withdraw(amount));
+        assertThrows(IllegalArgumentException.class, () -> wallet.withdraw(amount, UUID.randomUUID()));
     }
 
     @Test
     void shouldRejectWithdrawOfZero() {
         Wallet wallet = Wallet.create(walletId, ownerId, usd);
-        wallet.deposit(Money.of(new BigDecimal("100.00"), usd));
+        wallet.deposit(Money.of(new BigDecimal("100.00"), usd), UUID.randomUUID());
         Money zero = Money.of(BigDecimal.ZERO, usd);
-        assertThrows(IllegalArgumentException.class, () -> wallet.withdraw(zero));
+        assertThrows(IllegalArgumentException.class, () -> wallet.withdraw(zero, UUID.randomUUID()));
     }
 
     @Test
     void shouldRejectWithdrawOfNegativeAmount() {
         Wallet wallet = Wallet.create(walletId, ownerId, usd);
-        wallet.deposit(Money.of(new BigDecimal("100.00"), usd));
+        wallet.deposit(Money.of(new BigDecimal("100.00"), usd), UUID.randomUUID());
         assertThrows(IllegalArgumentException.class, () ->
             Money.of(new BigDecimal("-50.00"), usd));
     }
@@ -166,8 +166,8 @@ class WalletTest {
     @Test
     void shouldNotAllowBalanceToGoNegative() {
         Wallet wallet = Wallet.create(walletId, ownerId, usd);
-        wallet.deposit(Money.of(new BigDecimal("10.00"), usd));
-        wallet.withdraw(Money.of(new BigDecimal("5.00"), usd));
+        wallet.deposit(Money.of(new BigDecimal("10.00"), usd), UUID.randomUUID());
+        wallet.withdraw(Money.of(new BigDecimal("5.00"), usd), UUID.randomUUID());
         assertEquals(new BigDecimal("5.00"), wallet.balance().amount());
     }
 
@@ -175,16 +175,16 @@ class WalletTest {
     void shouldIncrementVersionOnDeposit() {
         Wallet wallet = Wallet.create(walletId, ownerId, usd);
         long initialVersion = wallet.version();
-        wallet.deposit(Money.of(new BigDecimal("50.00"), usd));
+        wallet.deposit(Money.of(new BigDecimal("50.00"), usd), UUID.randomUUID());
         assertEquals(initialVersion + 1, wallet.version());
     }
 
     @Test
     void shouldIncrementVersionOnWithdraw() {
         Wallet wallet = Wallet.create(walletId, ownerId, usd);
-        wallet.deposit(Money.of(new BigDecimal("100.00"), usd));
+        wallet.deposit(Money.of(new BigDecimal("100.00"), usd), UUID.randomUUID());
         long versionBefore = wallet.version();
-        wallet.withdraw(Money.of(new BigDecimal("30.00"), usd));
+        wallet.withdraw(Money.of(new BigDecimal("30.00"), usd), UUID.randomUUID());
         assertEquals(versionBefore + 1, wallet.version());
     }
 
