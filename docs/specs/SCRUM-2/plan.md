@@ -1,0 +1,125 @@
+# SCRUM-2: Technical Architecture Plan
+
+## Architecture Overview
+Add an HTTP REST layer on top of the existing SCRUM-1 command/query handlers. Each mutating endpoint intercepts requests before command execution to check an `IdempotencyService`. The service has two backends (Redis / in-memory) selected via configuration property.
+
+## Component Diagram
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     interfaces/api                            │
+│  ┌──────────────────────────────────────────────────────┐    │
+│  │               WalletController                        │    │
+│  │  ┌──────────────────────┐  ┌──────────────────────┐   │    │
+│  │  │ POST /{id}/deposit   │  │ POST /{id}/withdraw  │   │    │
+│  │  │ 1. Check idempotency │  │ 1. Check idempotency │   │    │
+│  │  │ 2. Validate amount   │  │ 2. Validate amount   │   │    │
+│  │  │ 3. Query wallet      │  │ 3. Query wallet      │   │    │
+│  │  │ 4. depositHandler    │  │ 4. withdrawHandler   │   │    │
+│  │  │ 5. Store idempotency │  │ 5. Cache on fail too │   │    │
+│  │  │ 6. Return response   │  │ 6. Return response   │   │    │
+│  │  └──────────────────────┘  └──────────────────────┘   │    │
+│  │                                                         │    │
+│  │  ┌──────────────────────────────────────────────────┐   │    │
+│  │  │           GET /{id} (no idempotency)             │   │    │
+│  │  └──────────────────────────────────────────────────┘   │    │
+│  └──────────────────┬───────────────────────────────────┘    │
+│                     │                                         │
+│                     ▼                                         │
+│  ┌──────────────────────────────────────────────────────┐    │
+│  │           GlobalExceptionHandler                      │    │
+│  │  @RestControllerAdvice for ResponseStatusException,   │    │
+│  │  IllegalArgumentException, and generic Exception      │    │
+│  └──────────────────────────────────────────────────────┘    │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                           ▼
+┌──────────────────────────────────────────────────────────────┐
+│                  application/command                          │
+│  ┌──────────────┐  ┌──────────────┐  ┌───────────────────┐  │
+│  │DepositHandler│  │WithdrawHandler│  │WithdrawRejectedEx │  │
+│  └──────┬───────┘  └──────┬───────┘  └───────────────────┘  │
+└─────────┼──────────────────┼─────────────────────────────────┘
+          │                  │
+          ▼                  ▼
+┌──────────────────────────────────────────────────────────────┐
+│                  infrastructure/idempotency                    │
+│  ┌─────────────────────┐    ┌─────────────────────────────┐  │
+│  │ IdempotencyService  │    │ IdempotencyRecord           │  │
+│  │ (interface)         │    │ (record: key, status, body, │  │
+│  │  - get(key)         │    │  requestHash, createdAt)    │  │
+│  │  - store(key, rec)  │    └─────────────────────────────┘  │
+│  └────────┬────────────┘                                      │
+│           │                                                    │
+│     ┌─────┴─────────────┐                                     │
+│     ▼                   ▼                                      │
+│  ┌────────────┐  ┌──────────────┐                              │
+│  │ InMemory   │  │ Redis        │                              │
+│  │ Idempotency│  │ Idempotency  │                              │
+│  │ Service    │  │ Service      │                              │
+│  │ (Concurrent│  │ (StringRedis │                              │
+│  │  HashMap)  │  │  Template)   │                              │
+│  └────────────┘  └──────────────┘                              │
+└──────────────────────────────────────────────────────────────┘
+```
+
+## Package Structure (new/added files)
+```
+com.jetledger.wallet
+├── infrastructure/
+│   └── idempotency/                    ← NEW
+│       ├── IdempotencyService.java
+│       ├── IdempotencyRecord.java
+│       ├── InMemoryIdempotencyService.java
+│       ├── RedisIdempotencyService.java
+│       └── IdempotencyConfiguration.java
+└── interfaces/
+    └── api/                            ← NEW
+        ├── WalletController.java
+        ├── DepositRequest.java
+        ├── WithdrawRequest.java
+        ├── WalletResponse.java
+        ├── ErrorResponse.java
+        └── GlobalExceptionHandler.java
+```
+
+## Data Flow (Deposit Example)
+```
+Client ──POST /api/v1/wallets/{id}/deposit──► WalletController
+  │                                              │
+  │  Idempotency-Key: <UUID>                     │
+  │  {"amount": "100.00"}                        │
+  │                                              ▼
+  │                                    idempotencyService.get(key)
+  │                                              │
+  │                                    ┌─────────┴─────────┐
+  │                                    │  Found?            │
+  │                                    ├─────────────────── │
+  │                                    │ YES ──► check hash │
+  │                                    │         ├─ match   │
+  │                                    │         │  return cached
+  │                                    │         └─ mismatch│
+  │                                    │            return 422
+  │                                    │ NO ──► execute      │
+  │                                    └─────────────────────┘
+  │                                              │
+  │                                    depositHandler.handle()
+  │                                              │
+  │                                    queryService.findById()
+  │                                              │
+  │                                    idempotencyService.store(key, record)
+  │                                              │
+  │                                    return 200 + WalletResponse
+```
+
+## Dependencies Added
+- `spring-boot-starter-data-redis` — Redis client for production idempotency store
+- `ObjectMapper` (already in Spring Boot Web) — JSON serialization of records
+
+## Configuration
+```yaml
+idempotency:
+  ttl: PT24H
+  redis:
+    enabled: false        # default: in-memory; set true for Redis
+```
