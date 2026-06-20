@@ -1,6 +1,6 @@
 # SCRUM-2: Idempotent Deposit/Withdraw Endpoints
 
-> **Note:** Spec generated retroactively — implementation preceded documentation due to a process gap, now fixed in implementation.md.
+> **Note:** Spec generated retroactively — implementation preceded documentation due to a process gap, now fixed in implementation.md. This spec was further reconciled after a CodeRabbit review round that hardened the `IdempotencyService` to an atomic `claim()`/`storeResult()` design with composite, wallet-scoped keys — see constitution.md Principle 9.
 
 ## Overview
 Add an HTTP API layer (`POST /api/v1/wallets/{id}/deposit` and `/withdraw`) on top of the existing SCRUM-1 command handlers. Every mutating endpoint requires a client-supplied `Idempotency-Key` (UUID) header to guarantee safe retries. Idempotency records are stored in either Redis (production) or an in-memory store (development/test) with a configurable TTL.
@@ -45,9 +45,10 @@ No idempotency; returns current wallet state.
 5. **Failed withdraw (insufficient funds)** — error response is also cached under the idempotency key
 
 ## Idempotency Key Schema
-- `IdempotencyRecord` fields: `idempotencyKey` (UUID), `responseStatus` (int), `responseBody` (String JSON), `requestHash` (SHA-256 of request toString), `createdAt` (Instant)
-- Redis key: `idempotency:{key}` with TTL applied at the Redis level
-- In-memory: `ConcurrentHashMap<UUID, IdempotencyRecord>` with lazy TTL check on `get()`
+- `IdempotencyRecord` fields: `idempotencyKey` (String), `responseStatus` (int), `responseBody` (String JSON), `requestHash` (SHA-256 of request + walletId), `createdAt` (Instant)
+- Redis key: `idempotency:{route}:{walletId}:{clientKey}` with TTL applied at the Redis level
+- Cache key composition: `IdempotencyKey.toCacheKey()` → `{route}:{walletId}:{clientKey}`
+- In-memory: Caffeine cache with `expireAfterWrite(ttl)`
 
 ## Request/Response DTOs
 
@@ -74,17 +75,27 @@ No idempotency; returns current wallet state.
 ## IdempotencyService Interface
 ```java
 interface IdempotencyService {
-    Optional<IdempotencyRecord> get(UUID idempotencyKey);
-    void store(UUID idempotencyKey, IdempotencyRecord record);
+    Optional<CachedResponse> claim(IdempotencyKey key, String requestHash);
+    void storeResult(IdempotencyKey key, CachedResponse response);
 }
 ```
 
+`claim()` is atomic — it both checks for an existing record and reserves the
+key in a single operation (via `putIfAbsent` for in-memory, `SETNX` for Redis),
+preventing the race condition where two concurrent requests with the same key
+could both pass a separate "check" step before either stored a result.
+
+`IdempotencyKey` is a composite of the client-supplied UUID, the route
+(`"deposit"`/`"withdraw"`), and the `WalletId` — not a bare UUID. This scopes
+idempotency per wallet and per operation, so the same client key reused on a
+different wallet or a different route does not collide.
+
 ### Implementations
 
-| Implementation | Backend | When Used |
-|---------------|---------|-----------|
-| `RedisIdempotencyService` | Redis via `StringRedisTemplate` | `idempotency.redis.enabled=true` |
-| `InMemoryIdempotencyService` | `ConcurrentHashMap` | Default (`matchIfMissing = true`) |
+| Implementation | Backend | Atomic Primitive | When Used |
+|---------------|---------|------------------|-----------|
+| `RedisIdempotencyService` | Redis via `StringRedisTemplate` | `SETNX` via `setIfAbsent()` | `idempotency.redis.enabled=true` |
+| `InMemoryIdempotencyService` | Caffeine cache | `putIfAbsent` on underlying `ConcurrentMap` | Default (`matchIfMissing = true`) |
 
 ### Configuration
 ```yaml
@@ -95,11 +106,12 @@ idempotency:
 ```
 
 ## Request Hash
-SHA-256 of `request.toString()` bytes. Used to detect body changes between calls sharing the same idempotency key.
+SHA-256 of `walletId + ":" + request.toString()` bytes. Includes the wallet ID in the hash input to prevent cross-wallet cache collisions when the same client key is reused on different wallets.
 
 ## Error Handling (GlobalExceptionHandler)
 - `ResponseStatusException` → mapped to status code + `ErrorResponse`
 - `IllegalArgumentException` → 400 `BAD_REQUEST`
+- `IdempotencyStoreCorruptedException` → 500 `IDEMPOTENCY_STORE_ERROR` (Redis deserialization failures — fail closed)
 - Unhandled exceptions → 500 `INTERNAL_ERROR` + structured log
 
 ## Financial Safety Checklist

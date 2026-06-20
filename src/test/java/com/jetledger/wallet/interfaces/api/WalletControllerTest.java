@@ -178,9 +178,11 @@ class WalletControllerTest {
 
         WalletResponse firstDeposit = deposit(idempotencyKey, "100.00");
         assertEquals(new BigDecimal("100.00"), firstDeposit.balance());
+        assertEquals(walletId, firstDeposit.walletId());
 
         WalletResponse secondDeposit = depositToWallet(secondWalletId.value(), idempotencyKey, "100.00");
         assertEquals(new BigDecimal("100.00"), secondDeposit.balance());
+        assertEquals(secondWalletId.value(), secondDeposit.walletId());
     }
 
     private WalletResponse deposit(UUID idempotencyKey, String amount) throws Exception {

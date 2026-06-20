@@ -4,13 +4,13 @@
 Add `spring-boot-starter-data-redis` to `build.gradle`.
 
 ## Task 2: Idempotency domain types
-Create `IdempotencyRecord` (record with key, status, body, requestHash, createdAt) and `IdempotencyService` interface (get/store).
+Create `IdempotencyKey` (record: clientKey UUID, route String, walletId WalletId — with `toCacheKey()`), `CachedResponse` (record: responseStatus, responseBody — with `toResponseEntity()`), `IdempotencyRecord` (record: idempotencyKey, responseStatus, responseBody, requestHash, createdAt), and `IdempotencyService` interface (`claim(IdempotencyKey, requestHash)`, `storeResult(IdempotencyKey, CachedResponse)`).
 
 ## Task 3: InMemoryIdempotencyService
-Implement with `ConcurrentHashMap<UUID, IdempotencyRecord>` and lazy TTL expiry on `get()`.
+Implement using Caffeine cache with `expireAfterWrite(ttl)`. `claim()` uses `putIfAbsent` on the underlying map as the atomic primitive — a placeholder record is inserted first, then polled briefly if another thread is mid-flight, to avoid the original get/store race.
 
 ## Task 4: RedisIdempotencyService
-Implement with `StringRedisTemplate`, key prefix `idempotency:`, Jackson serialization, Redis-native TTL.
+Implement with `StringRedisTemplate`, key prefix `idempotency:`, Jackson serialization, Redis-native TTL. `claim()` uses `setIfAbsent` (Redis SETNX) as the atomic primitive. Deserialization failures throw `IdempotencyStoreCorruptedException` (fail closed) rather than returning empty.
 
 ## Task 5: IdempotencyConfiguration
 Spring `@Configuration` that conditionally creates `RedisIdempotencyService` (when `idempotency.redis.enabled=true`) or `InMemoryIdempotencyService` (default).
