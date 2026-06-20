@@ -1,5 +1,6 @@
 package com.jetledger.wallet.interfaces.api;
 
+import com.jetledger.wallet.infrastructure.idempotency.IdempotencyStoreCorruptedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -25,6 +26,14 @@ public class GlobalExceptionHandler {
         return ResponseEntity
             .status(HttpStatus.BAD_REQUEST)
             .body(new ErrorResponse("BAD_REQUEST", e.getMessage()));
+    }
+
+    @ExceptionHandler(IdempotencyStoreCorruptedException.class)
+    public ResponseEntity<ErrorResponse> handleIdempotencyCorruption(IdempotencyStoreCorruptedException e) {
+        log.error("Idempotency store corrupted", e);
+        return ResponseEntity
+            .status(HttpStatus.INTERNAL_SERVER_ERROR)
+            .body(new ErrorResponse("IDEMPOTENCY_STORE_ERROR", "Idempotency record is corrupted"));
     }
 
     @ExceptionHandler(Exception.class)

@@ -5,6 +5,7 @@
 ## Files Created
 
 ### Infrastructure — Idempotency (5 files)
+
 | File | Responsibility |
 |------|---------------|
 | `infrastructure/idempotency/IdempotencyService.java` | Interface: `get(UUID) → Optional<IdempotencyRecord>`, `store(UUID, IdempotencyRecord)` |
@@ -14,6 +15,7 @@
 | `infrastructure/idempotency/IdempotencyConfiguration.java` | `@Configuration` choosing Redis or in-memory via `idempotency.redis.enabled` |
 
 ### Interfaces — API Layer (6 files)
+
 | File | Responsibility |
 |------|---------------|
 | `interfaces/api/WalletController.java` | REST controller: `POST /{id}/deposit`, `POST /{id}/withdraw`, `GET /{id}` |
@@ -24,11 +26,13 @@
 | `interfaces/api/GlobalExceptionHandler.java` | `@RestControllerAdvice` with 400/500/ passthrough handling |
 
 ### Tests (1 file)
+
 | File | Responsibility |
 |------|---------------|
 | `interfaces/api/WalletControllerTest.java` | Integration test (8 test methods) covering deposit, withdraw, idempotency caching, conflict, insufficient funds, and 404 |
 
 ### Configuration (2 files updated)
+
 | File | Change |
 |------|--------|
 | `build.gradle` | Added `spring-boot-starter-data-redis` dependency |
@@ -46,6 +50,7 @@
 7. **No Lombok in idempotency layer** — Consistent with SCRUM-1 convention. `IdempotencyRecord` is a plain Java record.
 
 ## Files Modified (existing)
+
 | File | Change |
 |------|--------|
 | `build.gradle` | Added `spring-boot-starter-data-redis` compile dependency |

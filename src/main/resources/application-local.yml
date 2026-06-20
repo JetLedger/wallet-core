@@ -1,0 +1,3 @@
+idempotency:
+  redis:
+    enabled: false

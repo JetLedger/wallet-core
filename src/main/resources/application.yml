@@ -16,4 +16,4 @@ server:
 idempotency:
   ttl: PT24H
   redis:
-    enabled: false
+    enabled: true

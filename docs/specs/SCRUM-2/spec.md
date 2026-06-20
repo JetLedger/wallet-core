@@ -11,6 +11,7 @@ Add an HTTP API layer (`POST /api/v1/wallets/{id}/deposit` and `/withdraw`) on t
 ## API Endpoints
 
 ### `POST /api/v1/wallets/{id}/deposit`
+
 | Aspect | Detail |
 |--------|--------|
 | Header | `Idempotency-Key: <UUID>` (required) |
@@ -21,6 +22,7 @@ Add an HTTP API layer (`POST /api/v1/wallets/{id}/deposit` and `/withdraw`) on t
 | 422 | Idempotency key reused with different request body → `IDEMPOTENCY_CONFLICT` |
 
 ### `POST /api/v1/wallets/{id}/withdraw`
+
 | Aspect | Detail |
 |--------|--------|
 | Header | `Idempotency-Key: <UUID>` (required) |
@@ -78,6 +80,7 @@ interface IdempotencyService {
 ```
 
 ### Implementations
+
 | Implementation | Backend | When Used |
 |---------------|---------|-----------|
 | `RedisIdempotencyService` | Redis via `StringRedisTemplate` | `idempotency.redis.enabled=true` |
@@ -106,5 +109,5 @@ SHA-256 of `request.toString()` bytes. Used to detect body changes between calls
 | Idempotency | UUID-based `Idempotency-Key` header, cached responses, conflict detection |
 | Request integrity | SHA-256 hash of request body prevents mismatched reuse |
 | TTL enforcement | Configurable TTL, lazy expiry for in-memory, Redis-native TTL |
-| Concurrency | `ConcurrentHashMap` for in-memory; Redis atomic ops |
+| Concurrency | Caffeine for in-memory; Redis atomic ops via claim() |
 | Audit trail | `IdempotencyRecord` timestamps + correlationId on domain events |

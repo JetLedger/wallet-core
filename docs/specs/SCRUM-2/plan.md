@@ -5,18 +5,18 @@ Add an HTTP REST layer on top of the existing SCRUM-1 command/query handlers. Ea
 
 ## Component Diagram
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │                     interfaces/api                            │
 │  ┌──────────────────────────────────────────────────────┐    │
 │  │               WalletController                        │    │
 │  │  ┌──────────────────────┐  ┌──────────────────────┐   │    │
 │  │  │ POST /{id}/deposit   │  │ POST /{id}/withdraw  │   │    │
-│  │  │ 1. Check idempotency │  │ 1. Check idempotency │   │    │
-│  │  │ 2. Validate amount   │  │ 2. Validate amount   │   │    │
-│  │  │ 3. Query wallet      │  │ 3. Query wallet      │   │    │
+│  │  │ 1. Validate amount   │  │ 1. Validate amount   │   │    │
+│  │  │ 2. Query wallet      │  │ 2. Query wallet      │   │    │
+│  │  │ 3. claim() key       │  │ 3. claim() key       │   │    │
 │  │  │ 4. depositHandler    │  │ 4. withdrawHandler   │   │    │
-│  │  │ 5. Store idempotency │  │ 5. Cache on fail too │   │    │
+│  │  │ 5. storeResult()     │  │ 5. Cache on fail     │   │    │
 │  │  │ 6. Return response   │  │ 6. Return response   │   │    │
 │  │  └──────────────────────┘  └──────────────────────┘   │    │
 │  │                                                         │    │
@@ -29,7 +29,8 @@ Add an HTTP REST layer on top of the existing SCRUM-1 command/query handlers. Ea
 │  ┌──────────────────────────────────────────────────────┐    │
 │  │           GlobalExceptionHandler                      │    │
 │  │  @RestControllerAdvice for ResponseStatusException,   │    │
-│  │  IllegalArgumentException, and generic Exception      │    │
+│  │  IllegalArgumentException, IdempotencyStoreCorrupted, │    │
+│  │  and generic Exception                                │    │
 │  └──────────────────────────────────────────────────────┘    │
 └──────────────────────────┬──────────────────────────────────┘
                            │
@@ -46,9 +47,10 @@ Add an HTTP REST layer on top of the existing SCRUM-1 command/query handlers. Ea
 │                  infrastructure/idempotency                    │
 │  ┌─────────────────────┐    ┌─────────────────────────────┐  │
 │  │ IdempotencyService  │    │ IdempotencyRecord           │  │
-│  │ (interface)         │    │ (record: key, status, body, │  │
-│  │  - get(key)         │    │  requestHash, createdAt)    │  │
-│  │  - store(key, rec)  │    └─────────────────────────────┘  │
+│  │ (interface)         │    │ (record: cacheKey, status,  │  │
+│  │  - claim(key, hash) │    │  body, requestHash,createdAt│  │
+│  │  - storeResult(key, │    └─────────────────────────────┘  │
+│  │       response)     │                                      │
 │  └────────┬────────────┘                                      │
 │           │                                                    │
 │     ┌─────┴─────────────┐                                     │
@@ -57,19 +59,22 @@ Add an HTTP REST layer on top of the existing SCRUM-1 command/query handlers. Ea
 │  │ InMemory   │  │ Redis        │                              │
 │  │ Idempotency│  │ Idempotency  │                              │
 │  │ Service    │  │ Service      │                              │
-│  │ (Concurrent│  │ (StringRedis │                              │
-│  │  HashMap)  │  │  Template)   │                              │
+│  │ (Caffeine) │  │ (SETNX)      │                              │
 │  └────────────┘  └──────────────┘                              │
 └──────────────────────────────────────────────────────────────┘
 ```
 
 ## Package Structure (new/added files)
-```
+
+```text
 com.jetledger.wallet
 ├── infrastructure/
 │   └── idempotency/                    ← NEW
+│       ├── IdempotencyKey.java
+│       ├── CachedResponse.java
 │       ├── IdempotencyService.java
 │       ├── IdempotencyRecord.java
+│       ├── IdempotencyStoreCorruptedException.java
 │       ├── InMemoryIdempotencyService.java
 │       ├── RedisIdempotencyService.java
 │       └── IdempotencyConfiguration.java
@@ -84,30 +89,40 @@ com.jetledger.wallet
 ```
 
 ## Data Flow (Deposit Example)
-```
+
+```text
 Client ──POST /api/v1/wallets/{id}/deposit──► WalletController
   │                                              │
   │  Idempotency-Key: <UUID>                     │
   │  {"amount": "100.00"}                        │
+  │                                              │
+  │  ┌──────────────────────────────────────────┐ │
+  │  │ 1. Validate amount (before claim)        │ │
+  │  │ 2. Query wallet (before claim)           │ │
+  │  │ 3. Compute requestHash (walletId + body) │ │
+  │  └──────────────────────────────────────────┘ │
   │                                              ▼
-  │                                    idempotencyService.get(key)
+  │                                    idempotencyService.claim(key, hash)
   │                                              │
   │                                    ┌─────────┴─────────┐
-  │                                    │  Found?            │
+  │                                    │  Claimed?          │
   │                                    ├─────────────────── │
-  │                                    │ YES ──► check hash │
+  │                                    │ NO (already        │
+  │                                    │  exists) ──► check │
+  │                                    │         hash       │
   │                                    │         ├─ match   │
-  │                                    │         │  return cached
+  │                                    │         │  toResponseEntity()
   │                                    │         └─ mismatch│
   │                                    │            return 422
-  │                                    │ NO ──► execute      │
+  │                                    │ YES (claimed) ──►  │
+  │                                    │    execute          │
   │                                    └─────────────────────┘
   │                                              │
   │                                    depositHandler.handle()
   │                                              │
   │                                    queryService.findById()
   │                                              │
-  │                                    idempotencyService.store(key, record)
+  │                                    idempotencyService.storeResult(key, cached)
   │                                              │
   │                                    return 200 + WalletResponse
 ```
@@ -117,6 +132,7 @@ Client ──POST /api/v1/wallets/{id}/deposit──► WalletController
 - `ObjectMapper` (already in Spring Boot Web) — JSON serialization of records
 
 ## Configuration
+
 ```yaml
 idempotency:
   ttl: PT24H

@@ -1,11 +1,10 @@
 package com.jetledger.wallet.infrastructure.idempotency;
 
 import java.util.Optional;
-import java.util.UUID;
 
 public interface IdempotencyService {
 
-    Optional<IdempotencyRecord> get(UUID idempotencyKey);
+    Optional<CachedResponse> claim(IdempotencyKey key, String requestHash);
 
-    void store(UUID idempotencyKey, IdempotencyRecord record);
+    void storeResult(IdempotencyKey key, CachedResponse response);
 }

@@ -11,14 +11,15 @@ import com.jetledger.wallet.application.query.WalletDto;
 import com.jetledger.wallet.application.query.WalletQueryService;
 import com.jetledger.wallet.domain.model.Money;
 import com.jetledger.wallet.domain.model.WalletId;
-import com.jetledger.wallet.infrastructure.idempotency.IdempotencyRecord;
+import com.jetledger.wallet.infrastructure.idempotency.CachedResponse;
+import com.jetledger.wallet.infrastructure.idempotency.IdempotencyKey;
 import com.jetledger.wallet.infrastructure.idempotency.IdempotencyService;
 import java.math.BigDecimal;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.time.Instant;
 import java.util.Currency;
 import java.util.HexFormat;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -60,45 +61,35 @@ public class WalletController {
     @PostMapping("/{id}/deposit")
     public ResponseEntity<String> deposit(
             @PathVariable UUID id,
-            @RequestHeader(IDEMPOTENCY_HEADER) UUID idempotencyKey,
+            @RequestHeader(IDEMPOTENCY_HEADER) UUID clientKey,
             @RequestBody DepositRequest request) {
         WalletId walletId = WalletId.from(id);
-        String requestHash = hash(request);
-
-        IdempotencyRecord existing = idempotencyService.get(idempotencyKey).orElse(null);
-        if (existing != null) {
-            if (!existing.requestHash().equals(requestHash)) {
-                return ResponseEntity
-                    .status(HttpStatus.UNPROCESSABLE_ENTITY)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(serialize(new ErrorResponse("IDEMPOTENCY_CONFLICT",
-                        "Idempotency key already used with different request body")));
-            }
-            return ResponseEntity
-                .status(existing.responseStatus())
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(existing.responseBody());
-        }
-
-        WalletDto wallet = queryService.findById(walletId)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Wallet not found"));
 
         BigDecimal amount = request.amount();
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "amount must be positive");
         }
 
+        WalletDto wallet = queryService.findById(walletId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Wallet not found"));
+
+        IdempotencyKey key = new IdempotencyKey(clientKey, "deposit", walletId);
+        String requestHash = hash(walletId.value() + ":" + request);
+
+        Optional<CachedResponse> existing = idempotencyService.claim(key, requestHash);
+        if (existing.isPresent()) {
+            return existing.get().toResponseEntity();
+        }
+
         Currency currency = Currency.getInstance(wallet.currency());
         Money money = Money.of(amount, currency);
-
-        depositHandler.handle(new DepositCommand(walletId, money, idempotencyKey));
+        depositHandler.handle(new DepositCommand(walletId, money, clientKey));
 
         WalletDto updated = queryService.findById(walletId).orElseThrow();
         WalletResponse response = WalletResponse.from(updated);
         String responseBody = serialize(response);
 
-        idempotencyService.store(idempotencyKey, new IdempotencyRecord(
-            idempotencyKey, 200, responseBody, requestHash, Instant.now()));
+        idempotencyService.storeResult(key, new CachedResponse(200, responseBody));
 
         return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(responseBody);
     }
@@ -106,47 +97,38 @@ public class WalletController {
     @PostMapping("/{id}/withdraw")
     public ResponseEntity<String> withdraw(
             @PathVariable UUID id,
-            @RequestHeader(IDEMPOTENCY_HEADER) UUID idempotencyKey,
+            @RequestHeader(IDEMPOTENCY_HEADER) UUID clientKey,
             @RequestBody WithdrawRequest request) {
         WalletId walletId = WalletId.from(id);
-        String requestHash = hash(request);
-
-        IdempotencyRecord existing = idempotencyService.get(idempotencyKey).orElse(null);
-        if (existing != null) {
-            if (!existing.requestHash().equals(requestHash)) {
-                return ResponseEntity
-                    .status(HttpStatus.UNPROCESSABLE_ENTITY)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(serialize(new ErrorResponse("IDEMPOTENCY_CONFLICT",
-                        "Idempotency key already used with different request body")));
-            }
-            return ResponseEntity
-                .status(existing.responseStatus())
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(existing.responseBody());
-        }
-
-        WalletDto wallet = queryService.findById(walletId)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Wallet not found"));
 
         BigDecimal amount = request.amount();
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "amount must be positive");
         }
 
+        WalletDto wallet = queryService.findById(walletId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Wallet not found"));
+
+        IdempotencyKey key = new IdempotencyKey(clientKey, "withdraw", walletId);
+        String requestHash = hash(walletId.value() + ":" + request);
+
+        Optional<CachedResponse> existing = idempotencyService.claim(key, requestHash);
+        if (existing.isPresent()) {
+            return existing.get().toResponseEntity();
+        }
+
         Currency currency = Currency.getInstance(wallet.currency());
         Money money = Money.of(amount, currency);
 
         try {
-            withdrawHandler.handle(new WithdrawCommand(walletId, money, idempotencyKey));
+            withdrawHandler.handle(new WithdrawCommand(walletId, money, clientKey));
         } catch (WithdrawRejectedException e) {
             WalletDto current = queryService.findById(walletId).orElseThrow();
             String errorBody = serialize(new ErrorResponse("INSUFFICIENT_FUNDS",
                 "Insufficient funds. Current balance: " + current.balance()));
-            idempotencyService.store(idempotencyKey, new IdempotencyRecord(
-                idempotencyKey, 422, errorBody, requestHash, Instant.now()));
+            idempotencyService.storeResult(key, new CachedResponse(422, errorBody));
             return ResponseEntity
-                .status(HttpStatus.UNPROCESSABLE_ENTITY)
+                .status(HttpStatus.UNPROCESSABLE_CONTENT)
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(errorBody);
         }
@@ -155,8 +137,7 @@ public class WalletController {
         WalletResponse response = WalletResponse.from(updated);
         String responseBody = serialize(response);
 
-        idempotencyService.store(idempotencyKey, new IdempotencyRecord(
-            idempotencyKey, 200, responseBody, requestHash, Instant.now()));
+        idempotencyService.storeResult(key, new CachedResponse(200, responseBody));
 
         return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(responseBody);
     }
@@ -169,9 +150,9 @@ public class WalletController {
         return ResponseEntity.ok().contentType(MediaType.APPLICATION_JSON).body(serialize(WalletResponse.from(dto)));
     }
 
-    private static String hash(Object request) {
+    private static String hash(String input) {
         try {
-            byte[] bytes = request.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            byte[] bytes = input.getBytes(java.nio.charset.StandardCharsets.UTF_8);
             byte[] digest = MessageDigest.getInstance("SHA-256").digest(bytes);
             return HexFormat.of().formatHex(digest);
         } catch (NoSuchAlgorithmException e) {
