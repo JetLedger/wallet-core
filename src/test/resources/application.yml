@@ -6,6 +6,8 @@ spring:
     hibernate:
       ddl-auto: create-drop
     show-sql: false
+  kafka:
+    enabled: false
 
 idempotency:
   ttl: PT24H

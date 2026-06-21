@@ -1,5 +1,6 @@
 package com.jetledger.wallet.infrastructure.persistence;
 
+import com.jetledger.wallet.infrastructure.event.SpringDomainEventPublisher;
 import com.jetledger.wallet.domain.model.*;
 import com.jetledger.wallet.domain.repository.WalletRepository;
 import lombok.extern.slf4j.Slf4j;
@@ -13,9 +14,11 @@ import java.util.*;
 public class JpaWalletRepository implements WalletRepository {
 
     private final SpringDataWalletRepository springDataRepository;
+    private final SpringDomainEventPublisher eventPublisher;
 
-    public JpaWalletRepository(SpringDataWalletRepository springDataRepository) {
+    public JpaWalletRepository(SpringDataWalletRepository springDataRepository, SpringDomainEventPublisher eventPublisher) {
         this.springDataRepository = springDataRepository;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
@@ -35,6 +38,10 @@ public class JpaWalletRepository implements WalletRepository {
                 Instant.now(),
                 Instant.now()));
         springDataRepository.save(entity);
+
+        var events = wallet.domainEvents();
+        events.forEach(eventPublisher::publish);
+        wallet.clearDomainEvents();
     }
 
     @Override
