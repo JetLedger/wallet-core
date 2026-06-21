@@ -2,8 +2,9 @@ package com.jetledger.wallet.infrastructure.kafka;
 
 import com.jetledger.wallet.domain.event.WalletDomainEvent;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 
 @Slf4j
 @Component
@@ -16,9 +17,9 @@ public class DomainEventBridge {
         this.redpandaPublisher = redpandaPublisher;
     }
 
-    @EventListener
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onDomainEvent(WalletDomainEvent event) {
         log.debug("Bridging domain event to Redpanda: {}", event.getClass().getSimpleName());
-        redpandaPublisher.publish(event);
+        redpandaPublisher.publish(event).join();
     }
 }

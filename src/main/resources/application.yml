@@ -10,6 +10,7 @@ spring:
       hibernate:
         format_sql: true
   kafka:
+    enabled: true
     bootstrap-servers: localhost:9092
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer

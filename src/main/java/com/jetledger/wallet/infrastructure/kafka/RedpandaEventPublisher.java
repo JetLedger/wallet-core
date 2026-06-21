@@ -4,6 +4,7 @@ import com.jetledger.wallet.domain.event.WalletDomainEvent;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
+import java.util.concurrent.CompletableFuture;
 
 @Slf4j
 @Component
@@ -16,21 +17,23 @@ public class RedpandaEventPublisher {
         this.kafkaTemplate = kafkaTemplate;
     }
 
-    public void publish(WalletDomainEvent event) {
+    public CompletableFuture<Void> publish(WalletDomainEvent event) {
         CloudEvent cloudEvent = CloudEvent.from(event);
         String json = cloudEvent.toJson();
 
         log.info("Publishing event to {}: type={}, id={}, correlationId={}",
             KafkaConfiguration.TRANSACTIONS_TOPIC, cloudEvent.type(), cloudEvent.id(), extractCorrelationId(event));
 
-        kafkaTemplate.send(KafkaConfiguration.TRANSACTIONS_TOPIC, cloudEvent.id(), json)
+        return kafkaTemplate.send(KafkaConfiguration.TRANSACTIONS_TOPIC, cloudEvent.id(), json)
+            .<Void>thenApply(result -> {
+                log.debug("Published event {} to {} at offset {}", cloudEvent.id(),
+                    KafkaConfiguration.TRANSACTIONS_TOPIC, result.getRecordMetadata().offset());
+                return null;
+            })
             .whenComplete((result, ex) -> {
                 if (ex != null) {
                     log.error("Failed to publish event {} to {}: {}", cloudEvent.id(),
                         KafkaConfiguration.TRANSACTIONS_TOPIC, ex.getMessage(), ex);
-                } else {
-                    log.debug("Published event {} to {} at offset {}", cloudEvent.id(),
-                        KafkaConfiguration.TRANSACTIONS_TOPIC, result.getRecordMetadata().offset());
                 }
             });
     }

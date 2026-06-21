@@ -43,6 +43,7 @@ class RedpandaEventPublisherTest {
     private EmbeddedKafkaBroker embeddedKafka;
 
     private KafkaTemplate<String, String> kafkaTemplate;
+    private DefaultKafkaProducerFactory<String, String> producerFactory;
     private Consumer<String, String> consumer;
 
     @BeforeEach
@@ -52,7 +53,8 @@ class RedpandaEventPublisherTest {
             ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class,
             ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class
         );
-        kafkaTemplate = new KafkaTemplate<>(new DefaultKafkaProducerFactory<>(producerProps));
+        producerFactory = new DefaultKafkaProducerFactory<>(producerProps);
+        kafkaTemplate = new KafkaTemplate<>(producerFactory);
 
         Map<String, Object> consumerProps = Map.of(
             ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, embeddedKafka.getBrokersAsString(),
@@ -71,6 +73,7 @@ class RedpandaEventPublisherTest {
     @AfterEach
     void tearDown() {
         if (consumer != null) consumer.close();
+        if (producerFactory != null) producerFactory.destroy();
     }
 
     @Test

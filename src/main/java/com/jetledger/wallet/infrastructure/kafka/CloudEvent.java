@@ -2,6 +2,9 @@ package com.jetledger.wallet.infrastructure.kafka;
 
 import com.jetledger.wallet.domain.event.*;
 import com.jetledger.wallet.domain.model.Money;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -12,63 +15,76 @@ public record CloudEvent(
     String id,
     String time,
     String datacontenttype,
-    String data
+    JsonNode data
 ) {
 
     private static final String SPEC_VERSION = "1.0";
     private static final String SOURCE = "/wallet-core";
     private static final String CONTENT_TYPE = "application/json";
+    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     public static CloudEvent from(WalletDomainEvent event) {
         String type;
-        String data;
+        ObjectNode dataNode = MAPPER.createObjectNode();
 
         switch (event) {
             case WalletCreated e -> {
                 type = "com.jetledger.wallet.created";
-                data = """
-                    {"walletId":"%s","ownerId":"%s","currency":"%s","timestamp":"%s"}
-                    """.formatted(e.walletId().value(), e.ownerId().value(), e.currency().getCurrencyCode(), e.timestamp());
+                dataNode.put("walletId", e.walletId().value().toString());
+                dataNode.put("ownerId", e.ownerId().value().toString());
+                dataNode.put("currency", e.currency().getCurrencyCode());
+                dataNode.put("timestamp", e.timestamp().toString());
             }
             case MoneyDeposited e -> {
                 type = "com.jetledger.wallet.deposited";
-                data = """
-                    {"walletId":"%s","amount":"%s","currency":"%s","balanceAfter":"%s","correlationId":"%s","timestamp":"%s"}
-                    """.formatted(
-                        e.walletId().value(), e.amount().amount().toPlainString(),
-                        e.amount().currency().getCurrencyCode(), e.balanceAfter().amount().toPlainString(),
-                        e.correlationId(), e.timestamp());
+                dataNode.put("walletId", e.walletId().value().toString());
+                dataNode.put("amount", e.amount().amount().toPlainString());
+                dataNode.put("currency", e.amount().currency().getCurrencyCode());
+                dataNode.put("balanceAfter", e.balanceAfter().amount().toPlainString());
+                dataNode.put("correlationId", e.correlationId().toString());
+                dataNode.put("timestamp", e.timestamp().toString());
             }
             case MoneyWithdrawn e -> {
                 type = "com.jetledger.wallet.withdrawn";
-                data = """
-                    {"walletId":"%s","amount":"%s","currency":"%s","balanceAfter":"%s","correlationId":"%s","timestamp":"%s"}
-                    """.formatted(
-                        e.walletId().value(), e.amount().amount().toPlainString(),
-                        e.amount().currency().getCurrencyCode(), e.balanceAfter().amount().toPlainString(),
-                        e.correlationId(), e.timestamp());
+                dataNode.put("walletId", e.walletId().value().toString());
+                dataNode.put("amount", e.amount().amount().toPlainString());
+                dataNode.put("currency", e.amount().currency().getCurrencyCode());
+                dataNode.put("balanceAfter", e.balanceAfter().amount().toPlainString());
+                dataNode.put("correlationId", e.correlationId().toString());
+                dataNode.put("timestamp", e.timestamp().toString());
             }
             case WithdrawRejected e -> {
                 type = "com.jetledger.wallet.withdraw.rejected";
-                data = """
-                    {"walletId":"%s","amount":"%s","currency":"%s","balance":"%s","reason":"%s","correlationId":"%s","timestamp":"%s"}
-                    """.formatted(
-                        e.walletId().value(), e.amount().amount().toPlainString(),
-                        e.amount().currency().getCurrencyCode(), e.balance().amount().toPlainString(),
-                        e.reason(), e.correlationId(), e.timestamp());
+                dataNode.put("walletId", e.walletId().value().toString());
+                dataNode.put("amount", e.amount().amount().toPlainString());
+                dataNode.put("currency", e.amount().currency().getCurrencyCode());
+                dataNode.put("balance", e.balance().amount().toPlainString());
+                dataNode.put("reason", e.reason());
+                dataNode.put("correlationId", e.correlationId().toString());
+                dataNode.put("timestamp", e.timestamp().toString());
             }
             default -> throw new IllegalArgumentException("Unknown event type: " + event.getClass().getSimpleName());
         }
 
         return new CloudEvent(
             SPEC_VERSION, type, SOURCE, UUID.randomUUID().toString(),
-            Instant.now().toString(), CONTENT_TYPE, data
+            Instant.now().toString(), CONTENT_TYPE, dataNode
         );
     }
 
     public String toJson() {
-        return """
-            {"specversion":"%s","type":"%s","source":"%s","id":"%s","time":"%s","datacontenttype":"%s","data":%s}
-            """.formatted(specversion, type, source, id, time, datacontenttype, data);
+        try {
+            ObjectNode root = MAPPER.createObjectNode();
+            root.put("specversion", specversion);
+            root.put("type", type);
+            root.put("source", source);
+            root.put("id", id);
+            root.put("time", time);
+            root.put("datacontenttype", datacontenttype);
+            root.set("data", data);
+            return MAPPER.writeValueAsString(root);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to serialize CloudEvent", e);
+        }
     }
 }

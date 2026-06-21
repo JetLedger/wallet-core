@@ -13,7 +13,7 @@
 
 ## Cross-references
 - wallet-contracts: https://github.com/JetLedger/wallet-contracts/pull/1
-- wallet-analytics: PR URL TBD
+- wallet-analytics: https://github.com/JetLedger/wallet-analytics/pull/1
 
 ## Validation
 - 68 tests pass (including 3 new EmbeddedKafka tests)
