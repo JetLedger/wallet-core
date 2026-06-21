@@ -4,6 +4,7 @@ import com.jetledger.wallet.domain.model.Wallet;
 import com.jetledger.wallet.domain.repository.WalletRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Slf4j
 @Service
@@ -15,6 +16,7 @@ public class DepositHandler {
         this.repository = repository;
     }
 
+    @Transactional
     public void handle(DepositCommand command) {
         Wallet wallet = repository.findById(command.walletId())
             .orElseThrow();
