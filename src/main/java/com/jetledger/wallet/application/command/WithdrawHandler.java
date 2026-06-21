@@ -24,9 +24,11 @@ public class WithdrawHandler {
         wallet.withdraw(command.amount(), command.correlationId());
         boolean rejected = wallet.domainEvents().stream()
             .anyMatch(e -> e instanceof WithdrawRejected);
+
+        repository.save(wallet);
+
         if (rejected) {
             throw new WithdrawRejectedException("Insufficient funds", wallet.balance());
         }
-        repository.save(wallet);
     }
 }

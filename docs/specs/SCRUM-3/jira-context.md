@@ -1,14 +1,13 @@
 # Jira Context: SCRUM-3
 
+> Scope: wallet-core only — see wallet-analytics' own jira-context.md for consumer-side criteria.
+
 ## Summary
-Publish domain events to Redpanda and consume them in wallet-analytics
+Publish domain events to Redpanda from wallet-core
 
 ## Acceptance Criteria
-- Events published to topic wallet.transactions.v1
-- CloudEvents envelope: specversion, type, source, id, time, data
-- wallet-analytics consumer with at-least-once semantics, idempotent handler
+- Events published to topic `wallet.transactions.v1`
+- CloudEvents envelope format: specversion, type, source, id, time, data
 - Redpanda schema registry enforces Avro schema (defined in wallet-contracts)
 - Integration test: publish event → consumer receives → read model updated
-- Dead-letter topic wallet.transactions.v1.dlq for deserialization failures
-- Consumer lag metric exposed via Micrometer
-- wallet-analytics scaffolded as Spring Boot 4 service
+- Dead-letter topic `wallet.transactions.v1.dlq` for deserialization failures
