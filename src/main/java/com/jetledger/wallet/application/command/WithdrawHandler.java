@@ -17,7 +17,7 @@ public class WithdrawHandler {
         this.repository = repository;
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = WithdrawRejectedException.class)
     public void handle(WithdrawCommand command) {
         Wallet wallet = repository.findById(command.walletId())
             .orElseThrow();
