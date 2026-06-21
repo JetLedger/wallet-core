@@ -20,6 +20,11 @@ public class DomainEventBridge {
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onDomainEvent(WalletDomainEvent event) {
         log.debug("Bridging domain event to Redpanda: {}", event.getClass().getSimpleName());
-        redpandaPublisher.publish(event).join();
+        redpandaPublisher.publish(event)
+            .exceptionally(ex -> {
+                log.error("Failed to bridge domain event {} to Redpanda: {}",
+                    event.getClass().getSimpleName(), ex.getMessage(), ex);
+                return null;
+            });
     }
 }
